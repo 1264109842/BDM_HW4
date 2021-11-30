@@ -65,7 +65,7 @@ if __name__=='__main__':
   new_data = []
 
   for i in range(len(NAICS)):
-    data.append(sc.textFile('hdfs:///data/share/bdm/core-places-nyc.csv')\
+    data.append(sc.textFile('core-places-nyc.csv')\
                   .filter(lambda x: next(csv.reader([x]))[9] in NAICS[i])\
                   .map(lambda x: next(csv.reader([x])))\
                   .map(lambda x: (x[0],x[1]))\
@@ -73,22 +73,22 @@ if __name__=='__main__':
                   .collect()
               )
 
-    new_data.append(sc.textFile('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*') \
+    new_data.append(sc.textFile('weekly_pattern') \
                       .filter(lambda x: tuple(next(csv.reader([x]))[0:2]) in data[i])\
                       .map(lambda x: next(csv.reader([x])))\
                       .map(lambda x: (x[12][:10],json.loads(x[16])))\
                       .flatMap(lambda x : mapday(x[0],x[1]))\
-                      .filter(lambda x: x[1] > 0 and x[0] > '2018-12-31' and x[0] < '2021-01-01')\
+                      # .filter(lambda x: x[1] > 0 and x[0] > '2018-12-31' and x[0] < '2021-01-01')\
                       .groupByKey() \
                       .mapValues(list)\
-                      .sortBy(lambda x: x[0])\
-                      .map(lambda x: (x[0][:4], "2020"+x[0][4:], int(round(statistics.median(x[1]))), statistics.pstdev(x[1])))
+                      .map(lambda x: ("2020" if x[0][:4] == '2018' else x[0][:4], "2020"+x[0][4:], int(round(statistics.median(x[1]))), statistics.pstdev(x[1])))\
+                      .sortBy(lambda x: (x[0], x[1]))
                   )
     
     new_data[i].map(lambda x: (x[0], x[1], x[2], low(x[2], x[3]), high(x[2], x[3])))\
-                  .coalesce(1)\
                   .map(lambda x: (x[0],x[1],x[2],x[3],x[4]))\
                   .toDF(["year", "date" , "median","low","high"])\
+                  .coalesce(1)\
                   .write.format("csv")\
                   .option("header", "true")\
                   .save(files[i])
