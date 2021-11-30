@@ -78,7 +78,7 @@ if __name__=='__main__':
                       .map(lambda x: next(csv.reader([x])))\
                       .map(lambda x: (x[12][:10],json.loads(x[16])))\
                       .flatMap(lambda x : mapday(x[0],x[1]))\
-                      .filter(lambda x: x[0] > 0 and x[0] > '2018-12-31' and x[0] < '2021-01-01')\
+                      .filter(lambda x: x[1] > 0 and x[0] > '2018-12-31' and x[0] < '2021-01-01')\
                       .groupByKey() \
                       .mapValues(list)\
                       .sortBy(lambda x: x[0])\
