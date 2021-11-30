@@ -64,14 +64,14 @@ if __name__=='__main__':
   new_data = []
 
   # for i in range(len(NAICS)):
-  data.append(sc.textFile('core-places-nyc.csv')\
+  data.append(sc.textFile('hdfs:///data/share/bdm/core-places-nyc.csv')\
                 .map(lambda x: next(csv.reader([x])))\
                 .filter(lambda x: x[9] in NAICS[0])\
                 .map(lambda x: [x[0],x[1]])\
                 .cache()\
                 .collect()
             )
-  new_data.append(sc.textFile('weekly_pattern') \
+  new_data.append(sc.textFile('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*') \
                     .map(lambda x: next(csv.reader([x])))\
                     .filter(lambda x: x[0:2] in data[0])\
                     .map(lambda x: (x[12][:10],x[16]))\
