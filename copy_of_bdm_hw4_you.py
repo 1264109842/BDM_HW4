@@ -7,22 +7,18 @@ Original file is located at
     https://colab.research.google.com/drive/1jGwVKQpU5SmQxANK3m2FUzgrcPdX99bV
 """
 
-# !pip install pyspark
+!pip install pyspark
 
 import pyspark
-import sys
 import json
 import csv
 from datetime import datetime
 from datetime import timedelta  
-import sys
 from pyspark.sql import SparkSession
-from pyspark import SparkContext
 import numpy as np
 from pyspark.sql import functions as F
 from pyspark.sql.types import DateType, IntegerType, MapType, StringType, FloatType
 from pyspark.sql.functions import split, col, substring, regexp_replace, explode
-
 
 sc = pyspark.SparkContext()
 spark = SparkSession(sc)
@@ -48,8 +44,8 @@ def high(x,y):
   return 0 if diff < 0 else diff
 
 def median(values_list):
-    med = int(np.median(values_list))
-    return med
+  med = int(np.median(values_list))
+  return med
 
 if __name__=='__main__':
 
@@ -66,10 +62,10 @@ if __name__=='__main__':
   udfLow    = F.udf(low, IntegerType())
   udfHigh   = F.udf(high, IntegerType())
 
-  newdf = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True)
+  newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True)
 
   for i in range(len(NAICS)):
-    df = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header= True) \
+    df = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True) \
                    .where(F.col('naics_code').isin(NAICS[i]))
     
 
@@ -87,9 +83,7 @@ if __name__=='__main__':
                   .withColumn('median', udfMedian('visits').alias('median'))\
                   .withColumn('low', udfLow('median', 'visits').alias('low'))\
                   .withColumn('high', udfHigh('median','visits').alias('high'))\
-                  .drop('visits')\
                   .select('year', 'date', 'median', 'low', 'high')\
-                  .coalesce(1)\
                   .write.format("csv")\
                   .option("header","true")\
                   .save(files[i])
