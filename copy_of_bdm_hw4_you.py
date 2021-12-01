@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1jGwVKQpU5SmQxANK3m2FUzgrcPdX99bV
 """
 
-#!pip install pyspark
+!pip install pyspark
 
 import pyspark
 import json
@@ -18,7 +18,7 @@ from pyspark.sql import SparkSession
 import numpy as np
 from pyspark.sql import functions as F
 from pyspark.sql.types import DateType, IntegerType, MapType, StringType, FloatType
-from pyspark.sql.functions import split, col, substring, regexp_replace, explode
+from pyspark.sql.functions import split, col, substring, regexp_replace, explode,broadcast
 
 sc = pyspark.SparkContext()
 spark = SparkSession(sc)
@@ -62,14 +62,17 @@ if __name__=='__main__':
           "/full_service_restaurants", "/limited_service_restaurants", "/pharmacies_and_drug_stores",
           "/snack_and_bakeries", "/specialty_food_stores", "/supermarkets_except_convenience_stores"]
 
-  newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True)
-  new = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True)
+  newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True).cache()
+  new = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True).cache()
+
+  data = []
 
   for i in range(len(NAICS)):
-      df = new.where(F.col('naics_code').isin(NAICS[i]))
+      df = new.where(F.col('naics_code').isin(NAICS[i])).cache()
 
-      newDF = newdf.join(df, (newdf.placekey == df.placekey) & (newdf.safegraph_place_id == df.safegraph_place_id), "inner")\
-                   .select(F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits'))
+      newDF = newdf.join(broadcast(df), (newdf.placekey == df.placekey) & (newdf.safegraph_place_id == df.safegraph_place_id))\
+                   .select(F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits'))\
+                   .cache()
 
       newDFF = newDF.filter((newDF.date > '2018-12-31') & (newDF.date < '2021-01-01') & (newDF.visits > 0))\
                     .groupBy('date')\
@@ -83,3 +86,6 @@ if __name__=='__main__':
                     .repartition(1)\
                     .write.option("header","true")\
                     .csv('test'+files[i])
+      
+      df.unpersist()
+      newDF.unpersist()
