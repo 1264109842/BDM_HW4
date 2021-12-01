@@ -19,14 +19,13 @@ import sys
 from pyspark.sql import SparkSession
 from pyspark import SparkContext
 import numpy as np
+from pyspark.sql import functions as F
+from pyspark.sql.types import DateType, IntegerType, MapType, StringType, FloatType
+from pyspark.sql.functions import split, col, substring, regexp_replace, explode
 
 
 sc = pyspark.SparkContext()
 spark = SparkSession(sc)
-
-from pyspark.sql import functions as F
-from pyspark.sql.types import DateType, IntegerType, MapType, StringType, FloatType
-from pyspark.sql.functions import split, col, substring, regexp_replace, explode
 
 def mapday(s, v):
   date_1 = datetime.strptime(s[:10], '%Y-%m-%d')
@@ -94,9 +93,10 @@ if __name__=='__main__':
                   .withColumn('high', udfHigh('median','visits').alias('high'))\
                   .drop('visits')\
                   .select('year', 'date', 'median', 'low', 'high')\
-                  .repartition(1)\
-                  .write.option("header","true")\
-                  .csv(files[i])
+                  .coalesce(1)\
+                  .write.format("csv")\
+                  .option("header","true")\
+                  .save(files[i])
 
 
 
