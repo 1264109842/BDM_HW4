@@ -29,14 +29,12 @@ spark = SparkSession(sc)
 
 def mapday(s, v):
   date_1 = datetime.strptime(s[:10], '%Y-%m-%d')
-  # result = ()
   result = {}
 
   l = json.loads(v)
 
   for i in range(0,7):
     date = date_1 + timedelta(days=i)
-    # result += (str(date)[:10], v[i]),
     result[date] = l[i]
 
   return result
@@ -68,16 +66,14 @@ if __name__=='__main__':
   udfLow    = F.udf(low, IntegerType())
   udfHigh   = F.udf(high, IntegerType())
 
+  newdf = spark.read.csv('weekly_pattern', header= True)
+
   for i in range(len(NAICS)):
-    data.append(spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True, escape='"') \
-                          .where(F.col('naics_code').isin(NAICS[i]))\
-                          .select('placekey', 'safegraph_place_id')
-    )
+    df = spark.read.csv('core-places-nyc.csv', header= True) \
+                   .where(F.col('naics_code').isin(NAICS[i]))
+    
 
-    newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header= True, escape='"')
-
-
-    newDF = newdf.join(data[i], (newdf.placekey == data[i].placekey) & (newdf.safegraph_place_id == data[i].safegraph_place_id), "inner")\
+    newDF = newdf.join(df, (newdf.placekey == df.placekey) & (newdf.safegraph_place_id == df.safegraph_place_id), "inner")\
                 .select('date_range_start','visits_by_day')\
                 .withColumn('date', substring('date_range_start',1,10))\
                 .drop('date_range_start')\
@@ -97,78 +93,3 @@ if __name__=='__main__':
                   .write.format("csv")\
                   .option("header","true")\
                   .save(files[i])
-
-
-
-  # TOTAL_NAICS = ['452210','452311','445120','722410',
-  #        '722511','722513','446110','446191','311811','722515',
-  #        '445210','445220','445230','445291','445292','445299','445110']
-
-  # data = []
-  # new_data = []
-
-  # newDFF = newDF.select(F.explode(udfExpand('date', 'visits_by_day')))
-
-
-  # extract
-
-  # extract_1 = sc.textFile('core-places-nyc.csv')\
-  #             .map(lambda x: next(csv.reader([x])))\
-  #             .filter(lambda x: x[9] in TOTAL_NAICS)\
-  #             .cache()
-  
-  # I = extract_1.collect()
-  # extract = [i[:2] for i in I]
-  
-  # extract_2 = sc.textFile('weekly_pattern')\
-  #               .map(lambda x: next(csv.reader([x])))\
-  #               .filter(lambda x: x[:2] in extract)\
-  #               .cache()
-
-
-  # for i in range(len(NAICS)):
-  #   data.append(sc.textFile('core-places-nyc.csv')\
-  #                 .map(lambda x: next(csv.reader([x])))\
-  #                 .filter(lambda x: x[9] in NAICS[i])\
-  #                 .map(lambda x: [x[0],x[1]])\
-  #                 .cache()\
-  #                 .collect()
-  #             )
-
-  #   new_data.append(sc.textFile('weekly_pattern') \
-  #                     .map(lambda x: next(csv.reader([x])))\
-  #                     .filter(lambda x: x[:2] in data[i])\
-  #                     .flatMap(lambda x : mapday(x[12][:10],json.loads(x[16])))\
-  #                     .filter(lambda x: x[1] > 0 and x[0] > '2018-12-31' and x[0] < '2021-01-01')\
-  #                     .groupByKey() \
-  #                     .mapValues(list)\
-  #                     .sortBy(lambda x: x[0])\
-  #                     .map(lambda x: (x[0][:4], "2020"+x[0][4:], np.median(x[1]), np.std(x[1])))\
-  #                     .map(lambda x: (x[0], x[1], int(round(x[2])), low(x[2], x[3]), high(x[2], x[3])))\
-  #                     .cache()
-  #                 )
-
-  #   new_data[i].map(lambda x: (x[0],x[1],x[2],x[3],x[4]))\
-  #              .toDF(["year","date","median","low","high"])\
-  #              .coalesce(1)\
-  #              .write.option("header","true")\
-  #              .csv(files[i])
-
-
-
-    # data.append(extract_1.filter(lambda x: x[9] in NAICS[i])\
-    #                       .map(lambda x: [x[0],x[1]])\
-    #                       .cache()\
-    #                       .collect()
-    # )
-
-    # new_data.append(extract_2.filter(lambda x: x[:2] in data[i])\
-    #                         .flatMap(lambda x : mapday(x[12][:10],json.loads(x[16])))\
-    #                         .filter(lambda x: x[1] > 0 and x[0] > '2018-12-31' and x[0] < '2021-01-01')\
-    #                         .groupByKey() \
-    #                         .mapValues(list)\
-    #                         .sortBy(lambda x: x[0])\
-    #                         .map(lambda x: (x[0][:4], "2020"+x[0][4:], np.median(x[1]), np.std(x[1])))\
-    #                         .map(lambda x: (x[0], x[1], int(round(x[2])), low(x[2], x[3]), high(x[2], x[3])))\
-    #                         .cache()
-    # )
