@@ -66,10 +66,10 @@ if __name__=='__main__':
   udfLow    = F.udf(low, IntegerType())
   udfHigh   = F.udf(high, IntegerType())
 
-  newdf = spark.read.csv('weekly_pattern', header= True)
+  newdf = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True)
 
   for i in range(len(NAICS)):
-    df = spark.read.csv('core-places-nyc.csv', header= True) \
+    df = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header= True) \
                    .where(F.col('naics_code').isin(NAICS[i]))
     
 
