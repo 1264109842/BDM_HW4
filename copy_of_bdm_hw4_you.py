@@ -46,24 +46,24 @@ def high(x,y):
 def median(values_list):
   med = int(np.median(values_list))
   return med
-  
+
 udfExpand = F.udf(mapday, MapType(DateType(), IntegerType()))
 udfMedian = F.udf(median, IntegerType())
 udfLow    = F.udf(low, IntegerType())
 udfHigh   = F.udf(high, IntegerType())
-
+  
 if __name__=='__main__':
 
   NAICS = [['452210','452311'],['445120'],['722410'],
          ['722511'],['722513'],['446110','446191'],['311811','722515'],
          ['445210','445220','445230','445291','445292','445299'],['445110']]
 
-  files = ["test/big_box_grocers", "test/convenience_stores", "test/drinking_places",
-          "test/full_service_restaurants", "test/limited_service_restaurants", "test/pharmacies_and_drug_stores",
-          "test/snack_and_bakeries", "test/specialty_food_stores", "test/supermarkets_except_convenience_stores"]
+  files = ["test1/big_box_grocers", "test1/convenience_stores", "test1/drinking_places",
+          "test1/full_service_restaurants", "test1/limited_service_restaurants", "test1/pharmacies_and_drug_stores",
+          "test1/snack_and_bakeries", "test1/specialty_food_stores", "test1/supermarkets_except_convenience_stores"]
 
-  newdf = spark.read.csv('weekly_pattern', header=True)
-  new = spark.read.csv('core-places-nyc.csv', header= True)
+  newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True)
+  new = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True)
 
   for i in range(len(NAICS)):
       df = new.where(F.col('naics_code').isin(NAICS[i]))
