@@ -24,7 +24,7 @@ sc = pyspark.SparkContext()
 spark = SparkSession(sc)
 
 def mapday(s, v):
-  date_1 = datetime.strptime(s, '%Y-%m-%d')
+  date_1 = datetime.strptime(s[:10], '%Y-%m-%d')
   result = {}
 
   l = json.loads(v)
@@ -58,9 +58,9 @@ if __name__=='__main__':
          ['722511'],['722513'],['446110','446191'],['311811','722515'],
          ['445210','445220','445230','445291','445292','445299'],['445110']]
 
-  files = ["test/big_box_grocers", "test/convenience_stores", "test/drinking_places",
-          "test/full_service_restaurants", "test/limited_service_restaurants", "test/pharmacies_and_drug_stores",
-          "test/snack_and_bakeries", "test/specialty_food_stores", "test/supermarkets_except_convenience_stores"]
+  files = ["/big_box_grocers", "/convenience_stores", "/drinking_places",
+          "/full_service_restaurants", "/limited_service_restaurants", "/pharmacies_and_drug_stores",
+          "/snack_and_bakeries", "/specialty_food_stores", "/supermarkets_except_convenience_stores"]
 
   newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True)
   new = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True)
@@ -69,8 +69,7 @@ if __name__=='__main__':
       df = new.where(F.col('naics_code').isin(NAICS[i]))
 
       newDF = newdf.join(df, (newdf.placekey == df.placekey) & (newdf.safegraph_place_id == df.safegraph_place_id), "inner")\
-                  .withColumn('date', substring('date_range_start',1,10))\
-                  .select(F.explode(udfExpand('date', 'visits_by_day')).alias('date', 'visits'))
+                   .select(F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits'))
 
       newDFF = newDF.filter((newDF.date > '2018-12-31') & (newDF.date < '2021-01-01') & (newDF.visits > 0))\
                     .groupBy('date')\
@@ -81,5 +80,6 @@ if __name__=='__main__':
                     .withColumn('low', udfLow('median', 'visits').alias('low'))\
                     .withColumn('high', udfHigh('median','visits').alias('high'))\
                     .select('year', 'date', 'median', 'low', 'high')\
-                    .coalesce(1)\
-                    .write.option("header", "true").csv(files[i])
+                    .repartition(1)\
+                    .write.option("header","true")\
+                    .csv('test'+files[i])
