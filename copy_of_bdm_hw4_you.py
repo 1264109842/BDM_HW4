@@ -63,11 +63,10 @@ if __name__=='__main__':
   udfHigh   = F.udf(high, IntegerType())
 
   newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True)
+  new = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True)
 
   for i in range(len(NAICS)):
-    df = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True) \
-                   .where(F.col('naics_code').isin(NAICS[i]))
-    
+    df = new.where(F.col('naics_code').isin(NAICS[i]))
 
     newDF = newdf.join(df, (newdf.placekey == df.placekey) & (newdf.safegraph_place_id == df.safegraph_place_id), "inner")\
                 .select('date_range_start','visits_by_day')\
@@ -83,7 +82,8 @@ if __name__=='__main__':
                   .withColumn('median', udfMedian('visits').alias('median'))\
                   .withColumn('low', udfLow('median', 'visits').alias('low'))\
                   .withColumn('high', udfHigh('median','visits').alias('high'))\
-                  .select('year', 'date', 'median', 'low', 'high')\
-                  .write.format("csv")\
-                  .option("header","true")\
-                  .save(files[i])
+                  .select('year', 'date', 'median', 'low', 'high')
+
+    newDFF.write.format("csv")\
+          .option("header","true")\
+          .save(files[i])
