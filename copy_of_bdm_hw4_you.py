@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1jGwVKQpU5SmQxANK3m2FUzgrcPdX99bV
 """
 
-!pip install pyspark
+# !pip install pyspark
 
 import pyspark
 import sys
