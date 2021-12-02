@@ -18,8 +18,7 @@ from pyspark.sql import SparkSession
 import numpy as np
 from pyspark.sql import functions as F
 from pyspark.sql.types import DateType, IntegerType, MapType, StringType, ArrayType
-from pyspark.sql.functions import split, col, substring, regexp_replace, explode, broadcast, when
-from pyspark.sql import Window
+from pyspark.sql.functions import split, col, substring, regexp_replace, explode, broadcast
 
 # sc = pyspark.SparkContext()
 # spark = SparkSession(sc)
@@ -64,8 +63,8 @@ if __name__=='__main__':
           "/full_service_restaurants", "/limited_service_restaurants", "/pharmacies_and_drug_stores",
           "/snack_and_bakeries", "/specialty_food_stores", "/supermarkets_except_convenience_stores"]
 
-  newdf = spark.read.csv('weekly_pattern', header=True)
-  new = spark.read.csv('core-places-nyc.csv', header= True)
+  newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True)
+  new = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True)
 
   for i in range(len(NAICS)):
     df = new.where(F.col('naics_code').isin(NAICS[i]))
