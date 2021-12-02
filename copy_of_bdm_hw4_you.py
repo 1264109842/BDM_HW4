@@ -17,8 +17,8 @@ from datetime import timedelta
 from pyspark.sql import SparkSession
 import numpy as np
 from pyspark.sql import functions as F
-from pyspark.sql.types import DateType, IntegerType, MapType, StringType, FloatType, ArrayType
-from pyspark.sql.functions import split, col, substring, regexp_replace, explode,broadcast, stddev
+from pyspark.sql.types import DateType, IntegerType, MapType, StringType, ArrayType
+from pyspark.sql.functions import split, col, substring, regexp_replace, explode, broadcast
 
 sc = pyspark.SparkContext()
 spark = SparkSession(sc)
@@ -74,9 +74,12 @@ if __name__=='__main__':
     newDFF = newDF.where((newDF.date > '2018-12-31') & (newDF.date < '2021-01-01') & (newDF.visits > 0))\
                   .groupBy('date')\
                   .agg(F.collect_list('visits').alias('visits'))\
-                  .withColumn('median', udfMedian('visits'))
+                  .withColumn('median', udfMedian('visits'))\
+                  .withColumn('year', substring('date',1,4))\
+                  .withColumn('date', regexp_replace('date', '2019', '2020'))
 
-    newDFFF = newDFF.select(substring('date',1,4).alias('year'), regexp_replace('date', '2019', '2020').alias('date'), newDFF.median[0].alias('median'),newDFF.median[1].alias('low'),newDFF.median[2].alias('high'))\
+    newDFFF = newDFF.select('year', 'date', newDFF.median[0].alias('median'),newDFF.median[1].alias('low'),newDFF.median[2].alias('high'))\
+                    .sort(newDFF.year, newDFF.date)\
                     .repartition(1)\
                     .write.option("header","true")\
                     .csv('test'+files[i])
