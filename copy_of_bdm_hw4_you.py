@@ -51,7 +51,7 @@ def mapday(s, v):
 #   return result 
 
 udfExpand = F.udf(mapday, MapType(DateType(), IntegerType()))
-udfMedian = F.udf(median, ArrayType(IntegerType()))
+# udfMedian = F.udf(median, ArrayType(IntegerType()))
   
 if __name__=='__main__':
 
