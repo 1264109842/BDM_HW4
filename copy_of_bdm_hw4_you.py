@@ -67,60 +67,54 @@ if __name__=='__main__':
   newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True)
   new = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True)
 
-  # df = new.where(F.col('naics_code').isin(TNAICS))
+  # df = new.withColumn("key", when(F.col('naics_code').isin(NAICS[0]), '0')
+  #                           .when(F.col('naics_code').isin(NAICS[1]), '1')
+  #                           .when(F.col('naics_code').isin(NAICS[2]), '2')
+  #                           .when(F.col('naics_code').isin(NAICS[3]), '3')
+  #                           .when(F.col('naics_code').isin(NAICS[4]), '4')
+  #                           .when(F.col('naics_code').isin(NAICS[5]), '5')
+  #                           .when(F.col('naics_code').isin(NAICS[6]), '6')
+  #                           .when(F.col('naics_code').isin(NAICS[7]), '7')
+  #                           .when(F.col('naics_code').isin(NAICS[8]), '8')
+  #                    )
 
-  df = new.withColumn("key", when(F.col('naics_code').isin(NAICS[0]), '0')
-                            .when(F.col('naics_code').isin(NAICS[1]), '1')
-                            .when(F.col('naics_code').isin(NAICS[2]), '2')
-                            .when(F.col('naics_code').isin(NAICS[3]), '3')
-                            .when(F.col('naics_code').isin(NAICS[4]), '4')
-                            .when(F.col('naics_code').isin(NAICS[5]), '5')
-                            .when(F.col('naics_code').isin(NAICS[6]), '6')
-                            .when(F.col('naics_code').isin(NAICS[7]), '7')
-                            .when(F.col('naics_code').isin(NAICS[8]), '8')
-                     )
+  # newDF = newdf.join(broadcast(df), (newdf.placekey == df.placekey) & (newdf.safegraph_place_id == df.safegraph_place_id))\
+  #                  .select(F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits'), 'key')
   
-  dff = df.where(F.col('key').isin(TNAICS))
-
-  newDF = newdf.join(broadcast(dff), (newdf.placekey == dff.placekey) & (newdf.safegraph_place_id == dff.safegraph_place_id))\
-                   .select(F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits'), 'key')
-  
-  newDFF = newDF.where((newDF.date > '2018-12-31') & (newDF.date < '2021-01-01') & (newDF.visits > 0))\
-                .groupBy('key', 'date')\
-                .agg(F.collect_list('visits').alias('visits'))\
-                .withColumn('median', udfMedian('visits'))\
-                .withColumn('year', substring('date',1,4))\
-                .withColumn('date', regexp_replace('date', '2019', '2020'))\
-                .orderBy('year', 'date')
-
-  for i in range(len(NAICS)):
-
-      newDFF.where(F.col('key').isin(TNAICS[i]))\
-            .select('year', 'date', newDFF.median[0].alias('median'),newDFF.median[1].alias('low'),newDFF.median[2].alias('high'))\
-            .coalesce(1)\
-            .write.format("csv")\
-            .option("header","true")\
-            .save('test'+files[i])
+  # newDFF = newDF.where((newDF.date > '2018-12-31') & (newDF.date < '2021-01-01') & (newDF.visits > 0))\
+  #               .groupBy('key', 'date')\
+  #               .agg(F.collect_list('visits').alias('visits'))\
+  #               .withColumn('median', udfMedian('visits'))\
+  #               .withColumn('year', substring('date',1,4))\
+  #               .withColumn('date', regexp_replace('date', '2019', '2020'))\
+  #               .orderBy('year', 'date')
 
   # for i in range(len(NAICS)):
-  #   df = new.where(F.col('naics_code').isin(NAICS[i]))
 
-  #   newDF = newdf.join(broadcast(df), (newdf.placekey == df.placekey))\
-  #                 .select(F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits'))
+  #     newDFF.where(F.col('key').isin(TNAICS[i]))\
+  #           .select('year', 'date', newDFF.median[0].alias('median'),newDFF.median[1].alias('low'),newDFF.median[2].alias('high'))\
+  #           .coalesce(1)\
+  #           .write.format("csv")\
+  #           .option("header","true")\
+  #           .save('test'+files[i])
+
+  for i in range(len(NAICS)):
+    df = new.where(F.col('naics_code').isin(NAICS[i]))
+
+    newDF = newdf.join(broadcast(df), (newdf.placekey == df.placekey))\
+                  .select(F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits'))
 
 
-  #   newDFF = newDF.where((newDF.date > '2018-12-31') & (newDF.date < '2021-01-01') & (newDF.visits > 0))\
-  #                 .groupBy('date')\
-  #                 .agg(F.collect_list('visits').alias('visits'))\
-  #                 .withColumn('median', udfMedian('visits'))\
-  #                 .withColumn('year', substring('date',1,4))\
-  #                 .withColumn('date', regexp_replace('date', '2019', '2020'))\
-  #                 .orderBy('year', 'date')
+    newDFF = newDF.where((newDF.date > '2018-12-31') & (newDF.date < '2021-01-01') & (newDF.visits > 0))\
+                  .groupBy('date')\
+                  .agg(F.collect_list('visits').alias('visits'))\
+                  .withColumn('median', udfMedian('visits'))\
+                  .orderBy('date')\
+                  .withColumn('year', substring('date',1,4))\
+                  .withColumn('date', regexp_replace('date', '2019', '2020'))
 
-  #   newDFFF = newDFF.select('year', 'date', newDFF.median[0].alias('median'),newDFF.median[1].alias('low'),newDFF.median[2].alias('high'))\
-  #                   .coalesce(1)\
-  #                   .write.format("csv")\
-  #                   .option("header","true")\
-  #                   .save('test'+files[i])
-
-newDFFF.show()
+    newDFFF = newDFF.select('year', 'date', newDFF.median[0].alias('median'),newDFF.median[1].alias('low'),newDFF.median[2].alias('high'))\
+                    .coalesce(1)\
+                    .write.format("csv")\
+                    .option("header","true")\
+                    .save('test'+files[i])
