@@ -36,19 +36,19 @@ def mapday(s, v):
 
   return result
 
-def median(values_list):
-  med = np.median(values_list)
-  stdev = np.std(values_list)
-  low = int(med-stdev)
-  high = int(med+stdev)
+# def median(values_list):
+#   med = np.median(values_list)
+#   stdev = np.std(values_list)
+#   low = int(med-stdev)
+#   high = int(med+stdev)
 
-  result = []
+#   result = []
 
-  result.append(int(med))
-  result.append(low) if low > 0 else result.append(0)
-  result.append(high) if high > 0 else result.append(0)
+#   result.append(int(med))
+#   result.append(low) if low > 0 else result.append(0)
+#   result.append(high) if high > 0 else result.append(0)
 
-  return result 
+#   return result 
 
 udfExpand = F.udf(mapday, MapType(DateType(), IntegerType()))
 udfMedian = F.udf(median, ArrayType(IntegerType()))
@@ -69,22 +69,34 @@ if __name__=='__main__':
   for i in range(len(NAICS)):
     df = new.where(F.col('naics_code').isin(NAICS[i]))
 
-    newDF = newdf.join(broadcast(df), (newdf.placekey == df.placekey))\
+    newDF = newdf.join(broadcast(df), (newdf.placekey == df.placekey) & (newdf.safegraph_place_id == df.safegraph_place_id))\
                   .select(F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits'))
 
 
     newDFF = newDF.where((newDF.date > '2018-12-31') & (newDF.date < '2021-01-01') & (newDF.visits > 0))\
                   .groupBy('date')\
-                  .agg(F.collect_list('visits').alias('visits'))\
-                  .withColumn('median', udfMedian('visits'))\
-                  .withColumn('year', substring('date',1,4))\
-                  .withColumn('date', regexp_replace('date', '2019', '2020'))\
-                  .orderBy('year', 'date')
+                  .agg(F.percentile_approx('visits',0.5).alias('median'),F.stddev('visits').alias('stddev'))\
+                  .na.fill(0)
 
-    newDFFF = newDFF.select('year', 'date', newDFF.median[0].alias('median'),newDFF.median[1].alias('low'),newDFF.median[2].alias('high'))\
+    newDFFF = newDFF.withColumn('low',  when(newDFF['median'] - newDFF['stddev'] < 0, 0)
+                                        .otherwise(newDFF['median'] - newDFF['stddev']))\
+                    .withColumn('high',  (newDFF.median + newDFF.stddev).cast('int'))\
+                    .withColumn('year', substring('date',1,4))\
+                    .withColumn('date', regexp_replace('date', '2019', '2020'))\
+                    .orderBy('year', 'date')
+
+    newDFFFF = newDFFF.select('year', 'date', 'median', 'low', 'high')\
                     .coalesce(1)\
                     .write.format("csv")\
                     .option("header","true")\
                     .save('test'+files[i])
 
-newDFF.show()
+      # newDFF = newDF.where((newDF.date > '2018-12-31') & (newDF.date < '2021-01-01') & (newDF.visits > 0))\
+      #               .groupBy('date')\
+      #               .agg(F.collect_list('visits').alias('visits'))\
+      #               .withColumn('median', udfMedian('visits'))\
+      #               .withColumn('year', substring('date',1,4))\
+      #               .withColumn('date', regexp_replace('date', '2019', '2020'))\
+      #               .orderBy('year', 'date')
+
+newDFFF.show(515, False)
