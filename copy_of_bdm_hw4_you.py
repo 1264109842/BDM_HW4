@@ -20,9 +20,8 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import DateType, IntegerType, MapType, StringType, ArrayType
 from pyspark.sql.functions import split, col, substring, regexp_replace, explode, broadcast
 
-# sc = pyspark.SparkContext()
-# spark = SparkSession(sc)
-spark=SparkSession.builder.appName("pysparkdf").getOrCreate()
+sc = pyspark.SparkContext()
+spark = SparkSession(sc)
 
 def mapday(s, v):
   date_1 = datetime.strptime(s[:10], '%Y-%m-%d')
@@ -77,10 +76,9 @@ if __name__=='__main__':
                   .agg(F.collect_list('visits').alias('visits'))\
                   .withColumn('median', udfMedian('visits'))\
                   .withColumn('year', substring('date',1,4))\
-                  .withColumn('date', regexp_replace('date', '2019', '2020'))\
-                  .orderBy('year', 'date')
+                  .orderBy('date')
 
-    newDFFFF = newDFF.select('year', 'date', newDFF.median[0].alias('median'), newDFF.median[1].alias('low'), newDFF.median[2].alias('high'))\
+    newDFFFF = newDFF.select('year', regexp_replace('date', '2019', '2020').alias('date'), newDFF.median[0].alias('median'), newDFF.median[1].alias('low'), newDFF.median[2].alias('high'))\
                     .coalesce(1)\
                     .write.format("csv")\
                     .option("header","true")\
