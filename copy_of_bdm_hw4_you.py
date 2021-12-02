@@ -21,8 +21,9 @@ from pyspark.sql.types import DateType, IntegerType, MapType, StringType, ArrayT
 from pyspark.sql.functions import split, col, substring, regexp_replace, explode, broadcast, when
 from pyspark.sql import Window
 
-sc = pyspark.SparkContext()
-spark = SparkSession(sc)
+# sc = pyspark.SparkContext()
+# spark = SparkSession(sc)
+spark=SparkSession.builder.appName("pysparkdf").getOrCreate()
 
 def mapday(s, v):
   date_1 = datetime.strptime(s[:10], '%Y-%m-%d')
@@ -63,8 +64,8 @@ if __name__=='__main__':
           "/full_service_restaurants", "/limited_service_restaurants", "/pharmacies_and_drug_stores",
           "/snack_and_bakeries", "/specialty_food_stores", "/supermarkets_except_convenience_stores"]
 
-  newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True)
-  new = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True)
+  newdf = spark.read.csv('weekly_pattern', header=True)
+  new = spark.read.csv('core-places-nyc.csv', header= True)
 
   for i in range(len(NAICS)):
     df = new.where(F.col('naics_code').isin(NAICS[i]))
@@ -77,9 +78,11 @@ if __name__=='__main__':
                   .groupBy('date')\
                   .agg(F.collect_list('visits').alias('visits'))\
                   .orderBy('date')\
-                  .withColumn('median', udfMedian('visits'))
+                  .withColumn('median', udfMedian('visits'))\
+                  .withColumn('year', substring('date',1,4))\
+                  .withColumn('date', regexp_replace('date', '2019', '2020'))
 
-    newDFF.select(substring('date',1,4).alias('year'), regexp_replace('date', '2019', '2020').alias('date'), newDFF.median[0].alias('median'),newDFF.median[1].alias('low'),newDFF.median[2].alias('high'))\
+    newDFF.select('year', 'date', newDFF.median[0].alias('median'),newDFF.median[1].alias('low'),newDFF.median[2].alias('high'))\
                     .coalesce(1)\
                     .write.format("csv")\
                     .option("header","true")\
