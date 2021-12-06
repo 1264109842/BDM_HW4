@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1jGwVKQpU5SmQxANK3m2FUzgrcPdX99bV
 """
 
-# !pip install pyspark
+!pip install pyspark
 
 import pyspark
 import json
@@ -23,6 +23,22 @@ from pyspark.sql.functions import split, col, substring, regexp_replace, explode
 sc = pyspark.SparkContext()
 spark = SparkSession(sc)
 
+NAICS = {"/big_box_grocers" : {'452210','452311'},
+          "/convenience_stores" : {'445120'},
+          "/drinking_places" : {'722410'},
+        "/full_service_restaurants" : {'722511'}, 
+        "/limited_service_restaurants" : {'722513'}, 
+        "/pharmacies_and_drug_stores" : {'446110','446191'},
+        "/snack_and_bakeries" : {'311811','722515'},
+        "/specialty_food_stores" : {'445210','445220','445230','445291','445292','445299'},
+        "/supermarkets_except_convenience_stores" : {'445110'}}
+
+files = ["/big_box_grocers", "/convenience_stores", "/drinking_places",
+        "/full_service_restaurants", "/limited_service_restaurants", "/pharmacies_and_drug_stores",
+        "/snack_and_bakeries", "/specialty_food_stores", "/supermarkets_except_convenience_stores"]
+
+naics = set.union(*NAICS.values())
+
 def mapday(s, v):
   date_1 = datetime.strptime(s[:10], '%Y-%m-%d')
   result = {}
@@ -30,75 +46,49 @@ def mapday(s, v):
   l = json.loads(v)
 
   for i in range(0,7):
+    if l[i] == 0: continue
     date = date_1 + timedelta(days=i)
-    result[date] = l[i]
+    if date.year in (2019, 2020):
+      result[date] = l[i]
 
   return result
 
-# def median(values_list):
-#   med = np.median(values_list)
-#   stdev = np.std(values_list)
-#   low = int(med-stdev)
-#   high = int(med+stdev)
+def median(values_list):
+  med = np.median(values_list)
+  stdev = np.std(values_list)
+  return [int(med), max(0, int(med-stdev+0.5)), int(med+stdev+0.5)]
 
-#   result = []
+def setNaics(n):
+  for a, b in enumerate(NAICS.values()):
+    if n in b:
+      return a
 
-#   result.append(int(med))
-#   result.append(low) if low > 0 else result.append(0)
-#   result.append(high) if high > 0 else result.append(0)
 
-#   return result
-
+udfExpand = F.udf(mapday, MapType(DateType(), IntegerType()))
+udfMedian = F.udf(median, ArrayType(IntegerType()))
+udfNaics  = F.udf(setNaics, IntegerType())
   
 if __name__=='__main__':
-
-  udfExpand = F.udf(mapday, MapType(DateType(), IntegerType()))
-  # udfMedian = F.udf(median, ArrayType(IntegerType()))
-  udfMedian = F.udf(lambda x: int(np.median(x)), IntegerType())
-
-  NAICS = [['452210','452311'],['445120'],['722410'],
-         ['722511'],['722513'],['446110','446191'],['311811','722515'],
-         ['445210','445220','445230','445291','445292','445299'],['445110']]
-
-  TNAICS = ['452210','452311','445120','722410',
-         '722511','722513','446110','446191','311811','722515',
-         '445210','445220','445230','445291','445292','445299','445110']
-
-  files = ["/big_box_grocers", "/convenience_stores", "/drinking_places",
-          "/full_service_restaurants", "/limited_service_restaurants", "/pharmacies_and_drug_stores",
-          "/snack_and_bakeries", "/specialty_food_stores", "/supermarkets_except_convenience_stores"]
 
   newdf = spark.read.csv('weekly_pattern', header=True)
   new = spark.read.csv('core-places-nyc.csv', header= True)
 
-  for i in range(len(NAICS)):
-    df = new.filter(F.col('naics_code').isin(NAICS[i]))
+  df = new.filter(F.col('naics_code').isin(*naics))\
+          .select('placeKey', udfNaics('naics_code').alias('Group')).cache()
 
-    newDF = newdf.join(broadcast(df), (newdf.placekey == df.placekey))\
-                  .select(F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits'))
+  newDF = newdf.join(broadcast(df), (newdf.placekey == df.placeKey))\
+                .select('Group', F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits')).cache()
+  
+  newDFF = newDF.groupBy('Group','date')\
+          .agg(F.collect_list('visits').alias('visits'))\
+          .withColumn('median', udfMedian('visits'))\
+          .withColumn('year', substring('date',1,4))\
+          .withColumn('date',regexp_replace('date', '2019', '2020'))\
+          .orderBy('year','date')\
+          .coalesce(1)\
+          .cache()
 
-    # newDFF = newDF.filter((newDF.date > '2018-12-31') & (newDF.date < '2021-01-01') & (newDF.visits > 0))\
-    #               .groupBy('date')\
-    #               .agg(F.collect_list('visits').alias('visits'))\
-    #               .withColumn('median', udfMedian('visits'))\
-    #               .withColumn('year', substring('date',1,4))\
-    #               .withColumn('date',regexp_replace('date', '2019', '2020'))\
-    #               .orderBy('year','date')
-
-    newDFF = newDF.where((newDF.date > '2018-12-31') & (newDF.visits > 0))\
-                  .groupBy('date')\
-                  .agg(F.collect_list('visits').alias('visits'),F.stddev('visits').cast('int').alias('stddev'))\
-                  .withColumn('median', udfMedian('visits'))\
-                  .na.fill(0)\
-
-    newDFFF = newDFF.withColumn('low',  F.when(newDFF.median - newDFF.stddev < 0, 0).otherwise((newDFF.median - newDFF.stddev)))\
-                    .withColumn('high',  (newDFF.median + newDFF.stddev))\
-                    .withColumn('year', substring('date',1,4))\
-                    .withColumn('date', regexp_replace('date', '2019', '2020'))\
-                    .orderBy('year', 'date')
-                    
-    newDFFF.select('year', 'date', 'median', 'low', 'high')\
-                    .coalesce(1)\
-                    .write.format("csv")\
-                    .option("header","true")\
-                    .save('test'+files[i])
+  for i, j in enumerate(NAICS):
+    newDFF.filter(F.col('Group') == i)\
+          .select('year', 'date', newDFF.median[0].alias('median'), newDFF.median[1].alias('low'), newDFF.median[2].alias('high'))\
+          .write.csv('test'+list(NAICS.keys())[i], mode='overwrite', header=True)
