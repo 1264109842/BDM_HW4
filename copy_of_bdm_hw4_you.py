@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1jGwVKQpU5SmQxANK3m2FUzgrcPdX99bV
 """
 
-!pip install pyspark
+# !pip install pyspark
 
 import pyspark
 import json
@@ -70,8 +70,8 @@ udfNaics  = F.udf(setNaics, IntegerType())
   
 if __name__=='__main__':
 
-  newdf = spark.read.csv('weekly_pattern', header=True)
-  new = spark.read.csv('core-places-nyc.csv', header= True)
+  newdf = spark.read.csv('hdfs:///data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True)
+  new = spark.read.csv('hdfs:///data/share/bdm/core-places-nyc.csv', header= True)
 
   df = new.filter(F.col('naics_code').isin(*naics))\
           .select('placeKey', udfNaics('naics_code').alias('Group')).cache()
