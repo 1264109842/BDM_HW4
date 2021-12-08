@@ -24,77 +24,77 @@ def main(sc, spark):
     dfPlaces = spark.read.csv('/data/share/bdm/core-places-nyc.csv', header=True, escape='"')
     dfPattern = spark.read.csv('/data/share/bdm/weekly-patterns-nyc-2019-2020/*', header=True, escape='"')
     OUTPUT_PREFIX = sys.argv[1]
-
-    CAT_CODES = {'445210', '722515', '445299', '445120', '452210', '311811', '722410', '722511', '445220', '445292', '445110', '445291', '445230', '446191', '446110', '722513', '452311'}
-    CAT_GROUP = {'452311': 0, '452210': 0, '445120': 1, '722410': 2, '722511': 3, '722513': 4, '446191': 5, '446110': 5, '722515': 6, '311811': 6, '445299': 7, '445220': 7, '445292': 7, '445291': 7, '445230': 7, '445210': 7, '445110': 8}
-
-    files = ["big_box_grocers", "convenience_stores", "drinking_places",
-            "full_service_restaurants", "limited_service_restaurants", "pharmacies_and_drug_stores",
-            "snack_and_bakeries", "specialty_food_stores", "supermarkets_except_convenience_stores"]
-
-    udfToGroup = F.udf(lambda x: CAT_GROUP[x] , T.IntegerType())
-
-    dfD = dfPlaces. \
-                  filter(F.col('naics_code').isin(CAT_CODES))\
-                  .withColumn('group', udfToGroup('naics_code'))\
-                  .select('placekey', 'group')\
-                  .cache()
     
-    groupCount = dict(dfD.groupBy('group')\
-                .count()\
-                .collect())
-    
-    
-    visitType = T.StructType([T.StructField('year', T.IntegerType()),
-                          T.StructField('date', T.StringType()),
-                          T.StructField('visits', T.IntegerType())])
-    
-    statsType = T.StructType([T.StructField('median', T.IntegerType()),
-                          T.StructField('low', T.IntegerType()),
-                          T.StructField('high', T.IntegerType())])
-    
-    def expandVisits(date_range_start, visits_by_day):
-      date_1 = datetime.datetime.strptime(date_range_start[:10], '%Y-%m-%d')
-      result = []
+    def setNaics(n):
+      for a, b in enumerate(NAICS.values()):
+        if n in b:
+          return a
 
-      l = json.loads(visits_by_day)
+    NAICS = {"/big_box_grocers" : {'452210','452311'},
+          "/convenience_stores" : {'445120'},
+          "/drinking_places" : {'722410'},
+        "/full_service_restaurants" : {'722511'}, 
+        "/limited_service_restaurants" : {'722513'}, 
+        "/pharmacies_and_drug_stores" : {'446110','446191'},
+        "/snack_and_bakeries" : {'311811','722515'},
+        "/specialty_food_stores" : {'445210','445220','445230','445291','445292','445299'},
+        "/supermarkets_except_convenience_stores" : {'445110'}}
 
-      for i in range(len(l)):
+    files = ["/big_box_grocers", "/convenience_stores", "/drinking_places",
+            "/full_service_restaurants", "/limited_service_restaurants", "/pharmacies_and_drug_stores",
+            "/snack_and_bakeries", "/specialty_food_stores", "/supermarkets_except_convenience_stores"]
+
+    naics = set.union(*NAICS.values())
+
+    udfNaics  = F.udf(setNaics, T.IntegerType())
+
+    df = dfPlaces.filter(F.col('naics_code').isin(*naics))\
+      .select('placeKey', udfNaics('naics_code').alias('Group')).cache()
+
+    groupCount = dict(df.groupBy('group')\
+              .count()\
+              .collect())
+
+    def mapday(s, v):
+      date_1 = datetime.datetime.strptime(s[:10], '%Y-%m-%d')
+      result = {}
+
+      l = json.loads(v)
+
+      for i in range(0,7):
         if l[i] == 0: continue
         date = date_1 + datetime.timedelta(days=i)
         if date.year in (2019, 2020):
-          result.append((int(date.year), str(date)[5:10], l[i]))
+          result[date] = l[i]
 
       return result
 
-    def computeStats(group, visits):
-      visits = np.fromiter(visits, np.int_)
-      visits.resize(groupCount[group])
-      med = np.median(visits)
-      stdev = np.std(visits)
-      return (int(med), max(0, int(med-stdev+0.5)), int(med+stdev+0.5))
+    def median(group,values_list):
+      values_list = np.fromiter(values_list, np.int_)
+      values_list.resize(groupCount[group])
+      med = np.median(values_list)
+      stdev = np.std(values_list)
+      return [int(med), max(0, int(med-stdev+0.5)), int(med+stdev+0.5)]
 
-    udfExpand = F.udf(expandVisits, T.ArrayType(visitType))
-    udfComputeStats = F.udf(computeStats, statsType)
+    udfExpand = F.udf(mapday, T.MapType(T.DateType(), T.IntegerType()))
+    udfMedian = F.udf(median, T.ArrayType(T.IntegerType()))
 
-    dfH = dfPattern.join(dfD, 'placekey') \
-                  .withColumn('expanded', F.explode(udfExpand('date_range_start', 'visits_by_day'))) \
-                  .select('group', 'expanded.*')\
-                  .groupBy('group', 'year', 'date') \
-                  .agg(F.collect_list('visits').alias('visits')) \
-                  .withColumn('stats', udfComputeStats('group', 'visits'))\
-                  .select('group', 'year', 'date', 'stats.*')\
-                  .orderBy('group', 'year', 'date')\
-                  .withColumn('date', F.concat(F.lit('2020-'), F.col('date')))\
-                  .coalesce(1)\
-                  .cache()
+    newDF = dfPattern.join(F.broadcast(df), (dfPattern.placekey == df.placeKey))\
+                  .select('Group', F.explode(udfExpand('date_range_start', 'visits_by_day')).alias('date', 'visits')).cache()
+    
+    newDFF = newDF.groupBy('Group','date')\
+            .agg(F.collect_list('visits').alias('visits'))\
+            .withColumn('median', udfMedian('Group', 'visits'))\
+            .withColumn('year', F.substring('date',1,4))\
+            .withColumn('date', F.regexp_replace('date', '2019', '2020'))\
+            .orderBy('year','date')\
+            .coalesce(1)\
+            .cache()
 
-    for i in range(9):
-      dfH.filter(F.col('group') == i) \
-          .drop('group') \
-          .coalesce(1) \
-          .write.csv(f'{OUTPUT_PREFIX}/{files[i]}',
-                    mode='overwrite', header=True)
+    for i, j in enumerate(NAICS):
+      newDFF.filter(F.col('Group') == i)\
+            .select('year', 'date', newDFF.median[0].alias('median'), newDFF.median[1].alias('low'), newDFF.median[2].alias('high'))\
+            .write.csv(OUTPUT_PREFIX+list(NAICS.keys())[i], mode='overwrite', header=True)
 
 if __name__=='__main__':
     sc = SparkContext()
